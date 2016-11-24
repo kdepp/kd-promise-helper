@@ -59,6 +59,50 @@ var rateLimit = function (_cnt, _interval) {
   };
 };
 
+// rate 表示每秒多少个请求
+var limit = function (rate) {
+  var interval = 1000 / rate;
+
+  return function (fn) {
+    var queue = [];
+    var timer = null;
+    var checkRun = function () {
+      if (queue.length === 0) {
+        clearInterval(timer);
+        timer = null;
+      }
+
+      var item = queue.shift();
+
+      fn.apply(null, item.args)
+      .then(
+        function (data) {
+          item.resolve(data);
+        },
+        function (err) {
+          item.reject(err);
+        }
+      );
+    };
+
+    return function () {
+      if (!timer) {
+        timer = setInterval(checkRun, interval);
+      }
+
+      var args = [].slice.apply(arguments);
+
+      return new Promise(function (resolve, reject) {
+        queue.push({
+          args: args,
+          resolve: resolve,
+          reject: reject
+        });
+      });
+    }
+  };
+};
+
 var queue = function (cnt, interval) {
   var queue = [];
   var throttle = rateLimit(cnt, interval);
@@ -143,6 +187,7 @@ var promisify = function (fn, context) {
 module.exports = {
   retry: promiseRetry,
   rateLimit: rateLimit,
+  limit: limit,
   queue: queue,
   concurrent: concurrent,
   promisify: promisify
